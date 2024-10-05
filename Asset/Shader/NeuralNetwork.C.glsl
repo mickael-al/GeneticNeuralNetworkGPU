@@ -48,7 +48,7 @@ float step_function(float x)
 layout(std430, binding = 0) buffer NNData
 {
 	uint numberNN;//nombre de reseaux de neuronne
-	uint sizeNN;//la taille d'un reseau de neuronne
+	uint sizeNN;//la taille d'un reseau de neuronne(le nombre de float entre chaque)
 	uint sizePPold;//la taille de perceptrons dans la couche precedente precedente
 	uint sizePPrevious;//la taille de perceptrons dans la couche precedente
 	uint sizePCurrent;//la taille de perceptrons dans la couche actuel	
@@ -62,9 +62,65 @@ layout(std430, binding = 1) buffer NNValue
 	float[] data;
 }nnv;
 
+
+float activation_function(float data, uint id)
+{
+	if (id == 0)
+	{
+		return tanh_activation(data);  // tanh
+	}
+	else if (id == 1)
+	{
+		return relu(data);             // ReLU
+	}
+	else if (id == 2)
+	{
+		return leaky_relu(data);       // Leaky ReLU
+	}
+	else if (id == 3)
+	{
+		return sigmoid(data);          // Sigmoid
+	}
+	else if (id == 4)
+	{
+		return elu(data);              // ELU
+	}
+	else if (id == 5)
+	{
+		return swish(data);            // Swish
+	}
+	else if (id == 6)
+	{
+		return step_function(data);    // Step
+	}
+	else if (id == 7)
+	{
+		return 0.0;					   // Death
+	}
+	else if (id == 8)
+	{
+		return (data / float(nnd.sizePPrevious));// Moyenne
+	}
+	// Retour par défaut (au cas où id n'est pas valide)
+	return data;
+}
+
+
 layout(local_size_x = GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
-	int i = int(gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * MAX_DIM_THREADS + gl_GlobalInvocationID.z * MAX_DIM_THREADS_THREADS);
-	
+	uint nid = uint(gl_GlobalInvocationID.x + gl_GlobalInvocationID.y * MAX_DIM_THREADS + gl_GlobalInvocationID.z * MAX_DIM_THREADS_THREADS);
+	if (nid >= nnd.sizePCurrent * nnd.numberNN)
+	{
+		return;
+	}
+	uint lpi = nid % nnd.sizePCurrent;//localPerceptronsIndex
+	uint off_inn = uint(double(nid) / double(nnd.sizePCurrent)) * nnd.sizeNN;//indexNeuralNetwork l'indice qui correspond au block du reseaux de neuronne
+	uint off_link = (nnd.sizePPrevious * lpi) + (2 * lpi);//l'offset de decallage des weight
+	float cummule = 0.0f;
+	for (uint i = 0; i < nnd.sizePPrevious; i++)//weight from current layer and use size of previous layer = number weight of current layer
+	{
+		cummule = cummule + (nnv.data[off_inn + nnd.loc + off_link + i] * nnv.data[off_inn + nnd.lop + (nnd.sizePPold*(i+1)) + (i*2)]);
+	}
+	nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious] = activation_function(cummule, uint(nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious + 1]));
 }

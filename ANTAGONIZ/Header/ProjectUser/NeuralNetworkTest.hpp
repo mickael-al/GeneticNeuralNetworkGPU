@@ -32,9 +32,13 @@ private:
     const ptrClass* m_pc;
     NeuralNetwork* m_neuralN;
 public:
-    int numberNeuralNetwork = 100;
+    int numberNeuralNetwork = 20;
+    int numberOfBest = 5;
+    float mutationWeight = 0.25;
+    float mutationWeightScale = 0.05;
+    float mutationActivation = 0.05;
 };
 
-REGISTER(Behaviour, NeuralNetworkTest, numberNeuralNetwork);
+REGISTER(Behaviour, NeuralNetworkTest, numberNeuralNetwork, numberOfBest, mutationWeight, mutationWeightScale, mutationActivation);
 
 #endif //!__NEURAL_NETWORK_TEST__

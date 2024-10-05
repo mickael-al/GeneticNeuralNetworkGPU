@@ -34,8 +34,7 @@ uint hash(uint x) {
 float randomInRange(uint value) 
 {
 	uint hashedValue = hash(value);
-	float normalized = float(hashedValue % 1000u) / 1000.0;
-	return normalized * 2.0 - 1.0;
+	return (float(hashedValue % 200000u) / 100000.0) - 1.0;
 }
 
 uniform uint random_uniform;
@@ -49,7 +48,7 @@ void main()
 		return;
 	}
 	uint lpi = nid%nnd.sizePCurrent;//localPerceptronsIndex
-	uint off_inn = uint(float(nid)/ float(nnd.sizePCurrent)) * nnd.numberNN;//indexNeuralNetwork l'indice qui correspond au block du reseaux de neuronne
+	uint off_inn = uint(double(nid)/ double(nnd.sizePCurrent)) * nnd.sizeNN;//indexNeuralNetwork l'indice qui correspond au block du reseaux de neuronne
 	uint off_link = (nnd.sizePPrevious * lpi) + (2 * lpi);//l'offset de decallage des weight
 	for (uint i = 0; i < nnd.sizePPrevious; i++)//weight from current layer and use size of previous layer = number weight of current layer
 	{
@@ -57,5 +56,4 @@ void main()
 	}
 	nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious] = 0.0f;// perceptrons value
 	nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious + 1] = nnd.activationType;//fonction d'activation
-	
 }
