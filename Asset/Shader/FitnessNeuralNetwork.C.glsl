@@ -15,6 +15,7 @@ layout(std430, binding = 0) buffer NNData
 	uint lop;//local previous offset
 	uint loc;//local offset current
 	uint activationType;//activation Type
+	uint negativeInputSize;//negativeInputSize
 }nnd;
 
 layout(std430, binding = 1) buffer NNValue
@@ -32,6 +33,14 @@ layout(std430, binding = 3) buffer NNResult
 	float[] result;
 }nnr;
 
+float getValue(uint index, uint inn)
+{
+	if (index % nnd.sizeNN >= nnd.negativeInputSize)
+	{
+		return nnv.data[index - (nnd.negativeInputSize * (inn + 1))];
+	}
+}
+
 layout(local_size_x = GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 void main()
 {
@@ -46,7 +55,8 @@ void main()
 	for (int i = 0; i < nnd.sizePCurrent;i++)
 	{
 		off_link = ((i + 1) * nnd.sizePPrevious) + (i*2);
-		cumule = cumule + abs(nnv.data[off_inn + nnd.loc + off_link] - nnr.result[i]);		
+		//cumule = cumule + abs(nnv.data[off_inn + nnd.loc + off_link] - nnr.result[i]);		
+		cumule = cumule + abs(getValue(off_inn + nnd.loc + off_link, nid)- nnr.result[i]);
 	}	
 	nne.error[nid] += cumule;
 }

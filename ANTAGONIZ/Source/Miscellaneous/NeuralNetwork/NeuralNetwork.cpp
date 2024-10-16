@@ -40,6 +40,7 @@ namespace Ge
 		m_ngd.sizePCurrent = nid.neuralLayer[nid.neuralLayer.size()-1].size;
 		m_ngd.activationType = nid.neuralLayer[nid.neuralLayer.size() - 1].typeActivation;
 		m_ngd.numberNN = nid.numberNeuralNetwork;
+		m_ngd.negativeInputSize = nid.neuralLayer[0].size * 2;
 		m_globalSize *= nid.numberNeuralNetwork;
 		Debug::Log("NeuralNetwork float number %d", m_globalSize);
 		m_nndata = new LargeArray<float>(m_globalSize);
@@ -49,9 +50,13 @@ namespace Ge
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboGlobalData);
 		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(NeuralGlobalData), &m_ngd, GL_STREAM_DRAW);
 
+		glGenBuffers(1, &m_ssboInputNNData);
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboInputNNData);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * nid.neuralLayer[0].size, nullptr, GL_DYNAMIC_COPY);
+
 		glGenBuffers(1, &m_ssboNNData);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboNNData);
-		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * m_globalSize, nullptr, GL_DYNAMIC_COPY);
+		glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(float) * (m_globalSize - (nid.neuralLayer[0].size*2* nid.numberNeuralNetwork)), nullptr, GL_DYNAMIC_COPY);
 
 		glGenBuffers(1, &m_ssboError);
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboError);
@@ -137,18 +142,11 @@ namespace Ge
 		for (int i = 0; i < tds.size(); i++)
 		{
 			m_computeLayer->use();
-			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboNNData);
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboInputNNData);
 			float* ssboData = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_WRITE);
 			if (ssboData != nullptr)
 			{
-				for (int j = 0; j < m_ngd.numberNN; j++)
-				{
-					for (int k = 0; k < tds[i].inputData.size(); k++)
-					{
-						ssboData[j * m_ngd.sizeNN + k * 2] = tds[i].inputData[k];
-						ssboData[j * m_ngd.sizeNN + k * 2 + 1] = -1;//pas de fonction d'activation
-					}
-				}
+				memcpy(ssboData, tds[i].inputData.data(), tds[i].inputData.size()*sizeof(float));
 				glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 			}
 			glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -167,6 +165,7 @@ namespace Ge
 				ShaderUtil::CalcWorkSize(m_ngd.sizePCurrent * m_ngd.numberNN, &x, &y, &z);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_ssboGlobalData);
 				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_ssboNNData);
+				glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_ssboInputNNData);				
 				m_computeLayer->dispatch(x, y, z);
 				glFinish();
 				m_ngd.sizePPold = m_ngd.sizePPrevious;
@@ -215,12 +214,11 @@ namespace Ge
 			m_ngd.sizePPold = m_ngd.sizePPrevious;//m_randomlocation
 		}		
 
-		int index_best = 0;
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboIndexError);
 		int* ssboIndexError = (int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 		if (ssboIndexError != nullptr)
 		{
-			memcpy(&index_best, ssboIndexError, sizeof(int));
+			memcpy(&m_index_best, ssboIndexError, sizeof(int));
 			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 		}
 
@@ -228,7 +226,54 @@ namespace Ge
 		ssboError = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
 		if (ssboError != nullptr)
 		{
-			std::cout << ssboError[index_best] << std::endl;
+			std::cout << ssboError[m_index_best] << std::endl;
+			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+		}
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+	}
+
+	void NeuralNetwork::computeNetwork(std::vector<float> &data, std::vector<float> &result)
+	{				
+		m_computeLayer->use();
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboInputNNData);
+		float* ssboData = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_WRITE);
+		if (ssboData != nullptr)
+		{
+			memcpy(ssboData, data.data(), data.size() * sizeof(float));
+			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
+		}
+		int x, y, z;
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+		m_ngd.sizePPold = 0;
+		for (int j = 1; j < m_nid.neuralLayer.size(); j++)
+		{
+			m_ngd.sizePCurrent = m_nid.neuralLayer[j].size;
+			m_ngd.activationType = m_nid.neuralLayer[j].typeActivation;
+			m_ngd.sizePPrevious = m_nid.neuralLayer[j - 1].size;
+			m_ngd.lop = m_layerOffset[j - 1];
+			m_ngd.loc = m_layerOffset[j];
+
+			glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboGlobalData);
+			glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, sizeof(NeuralGlobalData), &m_ngd);
+			ShaderUtil::CalcWorkSize(m_ngd.sizePCurrent * m_ngd.numberNN, &x, &y, &z);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, m_ssboGlobalData);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 1, m_ssboNNData);
+			glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 2, m_ssboInputNNData);
+			m_computeLayer->dispatch(x, y, z);
+			glFinish();
+			m_ngd.sizePPold = m_ngd.sizePPrevious;
+		}
+		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboNNData);
+		ssboData = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_WRITE);
+		if (ssboData != nullptr)
+		{
+			int off_inn = m_index_best * m_ngd.sizeNN;
+			int off_link;
+			for (int i = 0; i < m_ngd.sizePCurrent; i++)
+			{
+				off_link = ((i + 1) * m_ngd.sizePPrevious) + (i * 2);
+				result[i] = ssboData[(off_inn + m_ngd.loc + off_link) - (m_ngd.negativeInputSize * (m_index_best + 1))];
+			}
 			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 		}
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
@@ -236,22 +281,14 @@ namespace Ge
 
 	void NeuralNetwork::drawBestNeuralNetwork()
 	{
-		int index_best = 0;
-		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboIndexError);
-		int* ssboIndexError = (int*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_ONLY);
-		if (ssboIndexError != nullptr)
-		{
-			memcpy(&index_best, ssboIndexError, sizeof(int));
-			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
-		}
-
+		int sub = (m_nid.neuralLayer[0].size * 2 * (m_index_best +1));
 		glBindBuffer(GL_SHADER_STORAGE_BUFFER, m_ssboNNData);
 		float* ssboData = (float*)glMapBuffer(GL_SHADER_STORAGE_BUFFER, GL_READ_WRITE);
 		if (ssboData != nullptr)
 		{
-			for (int i = 0; i < m_ngd.sizeNN; i++)
+			for (int i = m_nid.neuralLayer[0].size * 2; i < m_ngd.sizeNN; i++)
 			{
-				std::cout << i << " : " << ssboData[index_best * m_ngd.sizeNN + i] << std::endl;
+				std::cout << i << " : " << ssboData[m_index_best * m_ngd.sizeNN + i - sub] << std::endl;
 			}
 			glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 		}
@@ -270,6 +307,7 @@ namespace Ge
 		delete m_fill;
 
 		glDeleteBuffers(1, &m_ssboNNData);
+		glDeleteBuffers(1, &m_ssboInputNNData);
 		glDeleteBuffers(1, &m_ssboGlobalData);
 		glDeleteBuffers(1, &m_ssboError);
 		glDeleteBuffers(1, &m_ssboIndexError);

@@ -15,6 +15,7 @@ layout(std430, binding = 0) buffer NNData
 	uint lop;//local previous offset
 	uint loc;//local offset current
 	uint activationType;//activation Type
+	uint negativeInputSize;//negativeInputSize
 }nnd;
 
 layout(std430, binding = 1) buffer NNValue
@@ -26,6 +27,26 @@ layout(std430, binding = 2) buffer NNIndex
 {
 	int[] index;
 }nni;
+
+float getValue(uint index, uint inn)
+{
+	if (index % nnd.sizeNN >= nnd.negativeInputSize)
+	{
+		return nnv.data[index - (nnd.negativeInputSize * (inn + 1))];
+	}
+	else
+	{
+		return 0.0f;
+	}
+}
+
+void setValue(uint index, uint inn, float val)
+{
+	if (index % nnd.sizeNN >= nnd.negativeInputSize)
+	{
+		nnv.data[index - (nnd.negativeInputSize * (inn + 1))] = val;
+	}
+}
 
 uniform uint numberOfBest;
 
@@ -39,9 +60,11 @@ void main()
 	}		
 	uint nnid =	uint(double(nid) / double(nnd.sizeNN));
 	uint loid = nid % nnd.sizeNN;
-	float data = nnv.data[nni.index[nnid]* nnd.sizeNN + loid];
+	//float data = nnv.data[nni.index[nnid]* nnd.sizeNN + loid];
+	float data = getValue(nni.index[nnid] * nnd.sizeNN + loid, uint(nni.index[nnid]));
 	for (uint i = nnid + numberOfBest; i < nnd.numberNN; i += numberOfBest)
 	{
-		nnv.data[nni.index[i] * nnd.sizeNN + loid] = data;
+		//nnv.data[nni.index[i] * nnd.sizeNN + loid] = data;
+		setValue(nni.index[i] * nnd.sizeNN + loid, uint(nni.index[i]), data);
 	}
 }

@@ -21,6 +21,7 @@ struct NeuralGlobalData
 	unsigned int lop;//local previous offset
 	unsigned int loc;//local offset current
 	unsigned int activationType;//activation Type
+	unsigned int negativeInputSize;//1 input for all neuralNetwork
 };
 
 struct NeuralMutate
@@ -56,9 +57,11 @@ namespace Ge
 		NeuralNetwork(NeuralInitData nid);		
 		void propagate(std::vector<TrainingData> tds);
 		void drawBestNeuralNetwork();
+		void computeNetwork(std::vector<float>& data, std::vector<float>& result);
 		~NeuralNetwork();
 	private:
-		unsigned int m_ssboGlobalData;
+		unsigned int m_ssboGlobalData;		
+		unsigned int m_ssboInputNNData;
 		unsigned int m_ssboNNData;
 		unsigned int m_ssboError;
 		unsigned int m_ssboIndexError;
@@ -81,6 +84,8 @@ namespace Ge
 
 		ComputeShader* m_bms;
 		ComputeShader* m_fill;
+
+		int m_index_best = -1;
 	};
 }
 

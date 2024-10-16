@@ -55,12 +55,18 @@ layout(std430, binding = 0) buffer NNData
 	uint lop;//local previous offset
 	uint loc;//local offset current
 	uint activationType;//activation Type
+	uint negativeInputSize;//negativeInputSize
 }nnd;
 
 layout(std430, binding = 1) buffer NNValue
 {
 	float[] data;
 }nnv;
+
+layout(std430, binding = 2) buffer NNInput
+{
+	float[] data;
+}nni;
 
 
 float activation_function(float data, uint id)
@@ -105,6 +111,26 @@ float activation_function(float data, uint id)
 	return data;
 }
 
+float getValue(uint index, uint inn)
+{
+	uint id = index % nnd.sizeNN;
+	if (id >= nnd.negativeInputSize)
+	{
+		return nnv.data[index - (nnd.negativeInputSize * (inn + 1))];
+	}
+	else
+	{
+		return nni.data[id / 2];
+	}
+}
+
+void setValue(uint index, uint inn, float val)
+{
+	if (index % nnd.sizeNN >= nnd.negativeInputSize)
+	{
+		nnv.data[index - (nnd.negativeInputSize * (inn + 1))] = val;
+	}
+}
 
 layout(local_size_x = GROUP_SIZE, local_size_y = 1, local_size_z = 1) in;
 void main()
@@ -115,12 +141,17 @@ void main()
 		return;
 	}
 	uint lpi = nid % nnd.sizePCurrent;//localPerceptronsIndex
-	uint off_inn = uint(double(nid) / double(nnd.sizePCurrent)) * nnd.sizeNN;//indexNeuralNetwork l'indice qui correspond au block du reseaux de neuronne
+	uint inn = uint(double(nid) / double(nnd.sizePCurrent));
+	uint off_inn = inn * nnd.sizeNN;//indexNeuralNetwork l'indice qui correspond au block du reseaux de neuronne
 	uint off_link = (nnd.sizePPrevious * lpi) + (2 * lpi);//l'offset de decallage des weight
+	uint fid = off_inn + nnd.loc + off_link;
 	float cummule = 0.0f;
 	for (uint i = 0; i < nnd.sizePPrevious; i++)//weight from current layer and use size of previous layer = number weight of current layer
 	{
-		cummule = cummule + (nnv.data[off_inn + nnd.loc + off_link + i] * nnv.data[off_inn + nnd.lop + (nnd.sizePPold*(i+1)) + (i*2)]);
+		//cummule = cummule + (nnv.data[off_inn + nnd.loc + off_link + i] * nnv.data[off_inn + nnd.lop + (nnd.sizePPold*(i+1)) + (i*2)]);
+		cummule = cummule + (getValue(fid + i, inn) * getValue(off_inn + nnd.lop + (nnd.sizePPold * (i + 1)) + (i * 2), inn));
 	}
-	nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious] = activation_function(cummule, uint(nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious + 1]));
+
+	//nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious] = activation_function(cummule, uint(nnv.data[off_inn + nnd.loc + off_link + nnd.sizePPrevious + 1]));
+	setValue(fid + nnd.sizePPrevious, inn, activation_function(cummule, uint(getValue(fid + nnd.sizePPrevious + 1,inn))));
 }
